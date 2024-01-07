@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"os/exec"
-	"strings"
 
 	"github.com/jroimartin/gocui"
 )
@@ -39,6 +38,7 @@ var commandGroups = map[string][]Command{
 		{"Git Pull", "git pull"},
 	},
 	"logs": {
+		{"Last (logins)", "sudo last"},
 		{"Apache Access (last 10)", "sudo tail -n 10 /var/log/apache2/access.log"},
 		{"Apache Error (last 10)", "sudo tail -n 10 /var/log/apache2/error.log"},
 	},
@@ -59,6 +59,8 @@ var selectedGroup = "general" // default which is glitchy for some reasont
 var sudoPassword string // passed as args to the commands that require sudo
 var isPasswordPopupActive bool
 var passwordPopup *gocui.View
+
+// var isMiddlePaneSelected bool
 
 func main() {
 	g, err := gocui.NewGui(gocui.OutputNormal)
@@ -106,6 +108,12 @@ func main() {
 	}
 
 	if err := g.SetKeybinding("", 'p', gocui.ModNone, getPassword); err != nil {
+		log.Panicln(err)
+	}
+
+	// selecting the middle pane
+
+	if err := g.SetKeybinding("", 'i', gocui.ModNone, selectMiddlePane); err != nil {
 		log.Panicln(err)
 	}
 
@@ -206,11 +214,14 @@ func executeCommand(g *gocui.Gui, v *gocui.View) error {
 	command := commandGroups[selectedGroup][cy].Cmd
 	fmt.Fprintln(middleView, "\033[32m$ "+command+"\033[0m") // Add color escape codes
 
-	if strings.HasPrefix(command, "sudo ") {
+	// if strings.HasPrefix(command, "sudo ") {
 		// Show password input popup
-		getPassword(g, v)
-		return nil
-	}
+
+        // REMOVING SUDO PASSWORD 
+
+		// getPassword(g, v)
+		// return nil
+	// }
 
 	cmd := exec.Command("/bin/sh", "-c", command)
 	output, err := cmd.Output()
@@ -244,6 +255,17 @@ func refreshRightPane(g *gocui.Gui) error {
 		fmt.Fprintln(v, command.Name)
 	}
 	return nil
+}
+
+func selectMiddlePane(g *gocui.Gui, v *gocui.View) error {
+    currentView := g.CurrentView()
+    if currentView.Name() == "middle" {
+        _, err := g.SetCurrentView("left")
+        return err
+    } else {
+        _, err := g.SetCurrentView("middle")
+        return err
+    }
 }
 
 func switchToView(viewName string) func(g *gocui.Gui, v *gocui.View) error {
