@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os/exec"
+	"strings"
 
 	"github.com/jroimartin/gocui"
 )
@@ -62,7 +63,57 @@ var passwordPopup *gocui.View
 
 var previousView string
 
-// var isMiddlePaneSelected bool
+
+// KEYBINDS
+
+type Keybinding struct {
+    ViewName string
+    Key      interface{}
+    Mod      gocui.Modifier
+    Handler  func(*gocui.Gui, *gocui.View) error
+}
+
+var keybindings = []Keybinding{
+    {"", gocui.KeyCtrlC, gocui.ModNone, quit},
+    {"", 'q', gocui.ModNone, quit},
+    {"right", gocui.KeyEnter, gocui.ModNone, executeCommand},
+    {"right", 'c', gocui.ModNone, clearMiddlePane},
+    {"", 'h', gocui.ModNone, switchToView("left")},
+    {"", 'l', gocui.ModNone, switchToView("right")},
+    {"", 'j', gocui.ModNone, moveCursorDown},
+    {"", 'k', gocui.ModNone, moveCursorUp},
+    {"", 'p', gocui.ModNone, getPassword},
+    {"", 'i', gocui.ModNone, selectMiddlePane},
+    {"", 'b', gocui.ModNone, switchToPreviousView},
+    {"middle", 'K', gocui.ModNone, scrollUp},
+    {"middle", 'J', gocui.ModNone, scrollDown},
+    {"passwordPopup", gocui.KeyEnter, gocui.ModNone, handlePassword},
+    {"left", gocui.KeyEnter, gocui.ModNone, switchToView("right")},
+}
+
+func enableKeybindings(g *gocui.Gui, viewName string) error {
+    for _, kb := range keybindings {
+        if kb.ViewName == viewName {
+            if err := g.SetKeybinding(kb.ViewName, kb.Key, kb.Mod, kb.Handler); err != nil {
+                return err
+            }
+        }
+    }
+    return nil
+}
+
+
+func disableKeybindings(g *gocui.Gui, viewName string) error {
+    for _, kb := range keybindings {
+        if kb.ViewName == viewName {
+            if err := g.DeleteKeybinding(kb.ViewName, kb.Key, kb.Mod); err != nil {
+                return err
+            }
+        }
+    }
+    return nil
+}
+
 
 func main() {
 	g, err := gocui.NewGui(gocui.OutputNormal)
@@ -78,71 +129,12 @@ func main() {
 
 	g.SetManagerFunc(layout)
 
-	if err := g.SetKeybinding("", gocui.KeyCtrlC, gocui.ModNone, quit); err != nil {
-		log.Panicln(err)
+	for _, kb := range keybindings {
+			if err := g.SetKeybinding(kb.ViewName, kb.Key, kb.Mod, kb.Handler); err != nil {
+					log.Panicln(err)
+			}
 	}
 
-	if err := g.SetKeybinding("", 'q', gocui.ModNone, quit); err != nil {
-		log.Panicln(err)
-	}
-
-	if err := g.SetKeybinding("right", gocui.KeyEnter, gocui.ModNone, executeCommand); err != nil {
-		log.Panicln(err)
-	}
-
-	if err := g.SetKeybinding("right", 'c', gocui.ModNone, clearMiddlePane); err != nil {
-		log.Panicln(err)
-	}
-
-	if err := g.SetKeybinding("", 'h', gocui.ModNone, switchToView("left")); err != nil {
-		log.Panicln(err)
-	}
-
-	if err := g.SetKeybinding("", 'l', gocui.ModNone, switchToView("right")); err != nil {
-		log.Panicln(err)
-	}
-
-	if err := g.SetKeybinding("", 'j', gocui.ModNone, moveCursorDown); err != nil {
-		log.Panicln(err)
-	}
-
-	if err := g.SetKeybinding("", 'k', gocui.ModNone, moveCursorUp); err != nil {
-		log.Panicln(err)
-	}
-
-	if err := g.SetKeybinding("", 'p', gocui.ModNone, getPassword); err != nil {
-		log.Panicln(err)
-	}
-
-	// selecting the middle pane
-
-	if err := g.SetKeybinding("", 'i', gocui.ModNone, selectMiddlePane); err != nil {
-		log.Panicln(err)
-	}
-
-	// switching to the previous view
-
-	if err := g.SetKeybinding("", 'b', gocui.ModNone, switchToPreviousView); err != nil {
-			log.Panicln(err)
-	}
-
-	// scrollnig up and down in the middle pane
-
-	if err := g.SetKeybinding("middle", 'K', gocui.ModNone, scrollUp); err != nil {
-		log.Panicln(err)
-	}
-	if err := g.SetKeybinding("middle", 'J', gocui.ModNone, scrollDown); err != nil {
-		log.Panicln(err)
-	}
-
-
-	if err := g.SetKeybinding("passwordPopup", gocui.KeyEnter, gocui.ModNone, handlePassword); err != nil {
-		log.Panicln(err)
-	}
-
-	if err := g.SetKeybinding("left", gocui.KeyEnter, gocui.ModNone, switchToView("right")); err != nil {
-		log.Panicln(err)
-	}
 
 	if err := g.MainLoop(); err != nil && err != gocui.ErrQuit {
 		log.Panicln(err)
@@ -214,6 +206,11 @@ func layout(g *gocui.Gui) error {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
+
+		if _, err := g.SetViewOnTop("middle"); err != nil {
+				return err
+		}
+
 		v.Editable = true
 		v.Wrap = true
 		v.Title = "Enter sudo password"
@@ -233,14 +230,14 @@ func executeCommand(g *gocui.Gui, v *gocui.View) error {
 	command := commandGroups[selectedGroup][cy].Cmd
 	fmt.Fprintln(middleView, "\033[32m$ "+command+"\033[0m") // Add color escape codes
 
-	// if strings.HasPrefix(command, "sudo ") {
+	if strings.HasPrefix(command, "sudo ") {
 		// Show password input popup
 
         // REMOVING SUDO PASSWORD 
 
-		// getPassword(g, v)
-		// return nil
-	// }
+		getPassword(g, v)
+		return nil
+	}
 
 	cmd := exec.Command("/bin/sh", "-c", command)
 	output, err := cmd.Output()
@@ -406,7 +403,7 @@ func getPassword(g *gocui.Gui, v *gocui.View) error {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
-		passwordPopup = v // Add this line
+		passwordPopup = v 
 		v.Title = "Enter sudo password"
 		v.Editable = true
 		v.Wrap = true
@@ -434,7 +431,8 @@ func handlePassword(g *gocui.Gui, v *gocui.View) error {
 	if err := g.DeleteView("passwordPopup"); err != nil {
 		return err
 	}
-	passwordPopup = nil // Add this line
+
+	passwordPopup = nil 
 	if _, err := g.SetCurrentView("right"); err != nil {
 		return err
 	}
