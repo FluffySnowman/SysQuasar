@@ -38,7 +38,7 @@ var commandGroups = map[string][]Command{
 		{"Git Pull", "git pull"},
 	},
 	"logs": {
-		{"Last (logins)", "sudo last"},
+		{"Last (logins)[10]", "sudo last -n 10"},
 		{"Apache Access (last 10)", "sudo tail -n 10 /var/log/apache2/access.log"},
 		{"Apache Error (last 10)", "sudo tail -n 10 /var/log/apache2/error.log"},
 	},
@@ -60,6 +60,8 @@ var sudoPassword string // passed as args to the commands that require sudo
 var isPasswordPopupActive bool
 var passwordPopup *gocui.View
 
+var previousView string
+
 // var isMiddlePaneSelected bool
 
 func main() {
@@ -70,6 +72,7 @@ func main() {
 	defer g.Close()
 
 	g.Highlight = true
+	g.Mouse = true
 	g.SelFgColor = gocui.ColorGreen
 	g.SelBgColor = gocui.ColorBlack
 
@@ -116,6 +119,22 @@ func main() {
 	if err := g.SetKeybinding("", 'i', gocui.ModNone, selectMiddlePane); err != nil {
 		log.Panicln(err)
 	}
+
+	// switching to the previous view
+
+	if err := g.SetKeybinding("", 'b', gocui.ModNone, switchToPreviousView); err != nil {
+			log.Panicln(err)
+	}
+
+	// scrollnig up and down in the middle pane
+
+	if err := g.SetKeybinding("middle", 'K', gocui.ModNone, scrollUp); err != nil {
+		log.Panicln(err)
+	}
+	if err := g.SetKeybinding("middle", 'J', gocui.ModNone, scrollDown); err != nil {
+		log.Panicln(err)
+	}
+
 
 	if err := g.SetKeybinding("passwordPopup", gocui.KeyEnter, gocui.ModNone, handlePassword); err != nil {
 		log.Panicln(err)
@@ -166,10 +185,10 @@ func layout(g *gocui.Gui) error {
 			return err
 		}
 		v.Title = "Output"
-		v.Wrap = true
+		// v.Wrap = false
 		v.Autoscroll = true
 		v.Highlight = true
-		v.SelBgColor = gocui.ColorGreen
+		v.SelBgColor = gocui.ColorWhite
 		v.SelFgColor = gocui.ColorBlack
 	}
 
@@ -268,49 +287,62 @@ func selectMiddlePane(g *gocui.Gui, v *gocui.View) error {
     }
 }
 
-func switchToView(viewName string) func(g *gocui.Gui, v *gocui.View) error {
-	return func(g *gocui.Gui, v *gocui.View) error {
-		if v != nil {
-			v.FgColor = gocui.ColorWhite
-		}
-
-		newView, err := g.SetCurrentView(viewName)
-		if err != nil {
-			return err
-		}
-		newView.FgColor = gocui.ColorBlue
-
-		_, cy := v.Cursor()
-		selectedGroup = v.BufferLines()[cy]
-		if err := refreshRightPane(g); err != nil {
-			return err
-		}
-		if viewName == "left" {
-			rightView, err := g.View("right")
-			if err != nil {
-				return err
-			}
-			rightView.Clear()
-		}
-
-		_, err = g.SetCurrentView(viewName)
-		return err
-
-	}
+func switchToView(viewName string) func(*gocui.Gui, *gocui.View) error {
+    return func(g *gocui.Gui, v *gocui.View) error {
+        previousView = v.Name() // saving the previousvwiew
+        _, err := g.SetCurrentView(viewName)
+        return err
+    }
 }
+
+func switchToPreviousView(g *gocui.Gui, v *gocui.View) error {
+    _, err := g.SetCurrentView(previousView)
+    return err
+}
+
+// func switchToView(viewName string) func(g *gocui.Gui, v *gocui.View) error {
+// 	return func(g *gocui.Gui, v *gocui.View) error {
+// 		if v != nil {
+// 			v.FgColor = gocui.ColorWhite
+// 		}
+
+// 		newView, err := g.SetCurrentView(viewName)
+// 		if err != nil {
+// 			return err
+// 		}
+// 		newView.FgColor = gocui.ColorBlue
+
+// 		_, cy := v.Cursor()
+// 		selectedGroup = v.BufferLines()[cy]
+// 		if err := refreshRightPane(g); err != nil {
+// 			return err
+// 		}
+// 		if viewName == "left" {
+// 			rightView, err := g.View("right")
+// 			if err != nil {
+// 				return err
+// 			}
+// 			rightView.Clear()
+// 		}
+
+// 		_, err = g.SetCurrentView(viewName)
+// 		return err
+
+// 	}
+// }
 
 func moveCursorDown(g *gocui.Gui, v *gocui.View) error {
 	if !isPasswordPopupActive {
 		cx, cy := v.Cursor()
 		ox, oy := v.Origin()
-		if cy+1 < len(v.BufferLines()) { // Added this check
+		if cy+1 < len(v.BufferLines()) && cy+1 < len(commandGroupNames) { // Added check for commandGroupNames
 			if err := v.SetCursor(cx, cy+1); err != nil && oy < len(v.BufferLines())-1 {
 				if err := v.SetOrigin(ox, oy+1); err != nil {
 					return err
 				}
 			}
 			if v.Name() == "left" {
-				selectedGroup = v.BufferLines()[cy+1]
+				selectedGroup = commandGroupNames[cy+1]
 				if err := refreshRightPane(g); err != nil {
 					return err
 				}
@@ -330,8 +362,8 @@ func moveCursorUp(g *gocui.Gui, v *gocui.View) error {
 					return err
 				}
 			}
-			if v.Name() == "left" {
-				selectedGroup = v.BufferLines()[cy-1]
+			if v.Name() == "left" && cy-1 >= 0 {
+				selectedGroup = commandGroupNames[cy-1]
 				if err := refreshRightPane(g); err != nil {
 					return err
 				}
@@ -339,6 +371,33 @@ func moveCursorUp(g *gocui.Gui, v *gocui.View) error {
 		}
 	}
 	return nil
+}
+
+// // scrolling for the middle pane
+
+func scrollUp(g *gocui.Gui, v *gocui.View) error {
+    if v != nil {
+        cx, cy := v.Cursor()
+        if err := v.SetCursor(cx, cy-1); err != nil && cy > 0 {
+            if err := v.SetOrigin(cx, cy-1); err != nil {
+                return err
+            }
+        }
+    }
+    return nil
+}
+
+func scrollDown(g *gocui.Gui, v *gocui.View) error {
+    if v != nil {
+        cx, cy := v.Cursor()
+        if err := v.SetCursor(cx, cy+1); err != nil {
+            ox, oy := v.Origin()
+            if err := v.SetOrigin(ox, oy+1); err != nil {
+                return err
+            }
+        }
+    }
+    return nil
 }
 
 func getPassword(g *gocui.Gui, v *gocui.View) error {
