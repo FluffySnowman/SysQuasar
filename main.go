@@ -73,6 +73,10 @@ func main() {
 		log.Panicln(err)
 	}
 
+	if err := g.SetKeybinding("", 'q', gocui.ModNone, quit); err != nil {
+		log.Panicln(err)
+	}
+
 	if err := g.SetKeybinding("right", gocui.KeyEnter, gocui.ModNone, executeCommand); err != nil {
 		log.Panicln(err)
 	}
@@ -117,8 +121,8 @@ func layout(g *gocui.Gui) error {
         v.Wrap = true
         v.Editable = false
         v.Highlight = true
-        v.SelBgColor = gocui.ColorGreen
-        v.SelFgColor = gocui.ColorBlack
+        v.SelBgColor = gocui.ColorBlue 
+        v.SelFgColor = gocui.ColorWhite 
 
 
 		// new new one 
@@ -214,20 +218,46 @@ func refreshRightPane(g *gocui.Gui) error {
 
 func switchToView(viewName string) func(g *gocui.Gui, v *gocui.View) error {
     return func(g *gocui.Gui, v *gocui.View) error {
+        if v != nil {
+            v.FgColor = gocui.ColorWhite
+        }
+
+        newView, err := g.SetCurrentView(viewName)
+        if err != nil {
+            return err
+        }
+        newView.FgColor = gocui.ColorBlue
+
         _, cy := v.Cursor()
         selectedGroup = v.BufferLines()[cy]
         if err := refreshRightPane(g); err != nil {
             return err
         }
-        if viewName == "left" { // Added this block
+        if viewName == "left" {
             rightView, err := g.View("right")
             if err != nil {
                 return err
             }
             rightView.Clear()
         }
-        _, err := g.SetCurrentView(viewName)
+
+        _, err = g.SetCurrentView(viewName) 
         return err
+
+        _, cy = v.Cursor() 
+        selectedGroup = v.BufferLines()[cy]
+        if err := refreshRightPane(g); err != nil {
+            return err
+        }
+        if viewName == "left" {
+            rightView, err := g.View("right")
+            if err != nil {
+                return err
+            }
+            rightView.Clear()
+        }
+
+        return nil
     }
 }
 
