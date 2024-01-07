@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"os/exec"
-	"strings"
 
 	"github.com/jroimartin/gocui"
 )
@@ -40,12 +39,27 @@ var commandGroups = map[string][]Command{
 	},
 	"logs": {
 		{"Last (logins)[10]", "sudo last -n 10"},
-		{"Apache Access (last 10)", "sudo tail -n 10 /var/log/apache2/access.log"},
-		{"Apache Error (last 10)", "sudo tail -n 10 /var/log/apache2/error.log"},
+		{"Apache Access (-n 10)", "sudo tail -n 10 /var/log/apache2/access.log"},
+		{"Apache Error (-n 10)", "sudo tail -n 10 /var/log/apache2/error.log"},
+		{"Nginx Access (-n 10)", "sudo tail -n 10 /var/log/nginx/access.log"},
+		{"Nginx Error (-n 10)", "sudo tail -n 10 /var/log/nginx/error.log"},
+		// {"Apache Acess (stream)", "sudo tail -f /var/log/apache2/access.log"},
 	},
 	"apache": {
 		{"Start Apache", "sudo systemctl start apache2"},
 		{"Stop Apache", "sudo systemctl stop apache2"},
+		{"Status Apache", "sudo systemctl status apache2"},
+		{"Apache Access (-n 10)", "sudo tail -n 10 /var/log/apache2/access.log"},
+		{"Apache Error (-n 10)", "sudo tail -n 10 /var/log/apache2/error.log"},
+		// {"Edit Config", "sudo vi /etc/apache2/apache2.conf"},
+		{"Edit Config", "echo 'feature WIP'"},
+	},
+	"nginx": {
+		{"Start Nginx", "sudo systemctl start nginx"},
+		{"Stop Nginx", "sudo systemctl stop nginx"},
+		{"Status Nginx", "sudo systemctl status nginx"},
+		{"Edit Config", "echo 'feature WIP'"},
+		// {"Edit Config", "sudo vi /etc/apache2/apache2.conf"},
 	},
 	"docker": {
 		{"Start Docker", "sudo systemctl start docker.service docker.socket"},
@@ -53,7 +67,7 @@ var commandGroups = map[string][]Command{
 	},
 }
 
-var commandGroupNames = []string{"general", "git", "logs", "apache", "docker"}
+var commandGroupNames = []string{"general", "git", "logs", "apache", "nginx", "docker"}
 
 var selectedGroup = "general" // default which is glitchy for some reasont
 
@@ -230,14 +244,12 @@ func executeCommand(g *gocui.Gui, v *gocui.View) error {
 	command := commandGroups[selectedGroup][cy].Cmd
 	fmt.Fprintln(middleView, "\033[32m$ "+command+"\033[0m") // Add color escape codes
 
-	if strings.HasPrefix(command, "sudo ") {
-		// Show password input popup
+	// if strings.HasPrefix(command, "sudo ") {
 
-        // REMOVING SUDO PASSWORD 
 
-		getPassword(g, v)
-		return nil
-	}
+	// 	getPassword(g, v)
+	// 	return nil
+	// }
 
 	cmd := exec.Command("/bin/sh", "-c", command)
 	output, err := cmd.Output()
